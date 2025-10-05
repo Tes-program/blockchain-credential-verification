@@ -5,7 +5,8 @@ import {
   getCredentials, 
   getCredentialDetails, 
   revokeACredential, 
-  shareCredential 
+  shareCredential,
+  issueBatchCredentials
 } from '../controllers/credentialsController';
 import { authenticate, requireRole } from '../middleware/auth';
 

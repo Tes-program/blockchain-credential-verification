@@ -12,11 +12,14 @@
     "deploy:contracts:sepolia": "npx hardhat compile && yarn copy-abis && npx hardhat run --network sepolia src/scripts/deployContracts.ts",
     "deploy:contracts:local": "npx hardhat compile && yarn copy-abis && npx hardhat run scripts/deployContracts.ts --network localhost",
     "register-institution": "npx hardhat run --network sepolia src/scripts/registerInstitution.ts --no-compile",
-    "test:pinata": "ts-node src/scripts/testPinata.ts"
+    "test:pinata": "ts-node src/scripts/testPinata.ts",
+    "test:scalability": "ts-node src/tests/scalability-test.ts"
   },
   "dependencies": {
+    "@faker-js/faker": "9.9.0",
     "@pinata/sdk": "^2.1.0",
     "@types/cors": "^2.8.17",
+    "@types/dotenv-safe": "^9.1.0",
     "@types/express": "^5.0.1",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/multer": "^1.4.12",
@@ -33,6 +36,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.12.2",
     "multer": "^1.4.5-lts.2",
+    "pdfkit": "^0.17.2",
     "typescript": "^5.8.2"
   },
   "devDependencies": {
@@ -40,7 +44,6 @@
     "@nomiclabs/hardhat-waffle": "^2.0.6",
     "@typechain/ethers-v5": "^11.1.2",
     "@typechain/hardhat": "^9.1.0",
-    "@types/dotenv-safe": "^8.1.6",
     "ethereum-waffle": "^4.0.10",
     "nodemon": "^3.1.9",
     "ts-node": "^10.9.2",

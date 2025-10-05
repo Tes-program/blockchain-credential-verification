@@ -377,6 +377,226 @@ export const getCredentialDetails = async (req: AuthRequest, res: Response) => {
   }
 };
 
+
+export const issueBatchCredentials = async (req: AuthRequest, res: Response) => {
+  try {
+    const issuerId = req.userId;
+    const { credentials } = req.body;
+
+    // Validate input
+    if (!credentials || !Array.isArray(credentials)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid request: 'credentials' array is required",
+      });
+    }
+
+    // Enforce batch size limit
+    const MAX_BATCH_SIZE = 50;
+    if (credentials.length > MAX_BATCH_SIZE) {
+      return res.status(400).json({
+        success: false,
+        message: `Batch size exceeds maximum limit of ${MAX_BATCH_SIZE}`,
+      });
+    }
+
+    // Verify issuer is an institution
+    const issuer = await User.findOne({ userId: issuerId });
+    if (!issuer || issuer.role !== "institution") {
+      return res.status(403).json({
+        success: false,
+        message: "Only institutions can issue credentials",
+      });
+    }
+
+    const institution = await Institution.findOne({ userId: issuerId });
+    if (!institution) {
+      return res.status(404).json({
+        success: false,
+        message: "Institution profile not found",
+      });
+    }
+
+    // Results tracking
+    const results = {
+      successful: [],
+      failed: [],
+      totalGasUsed: "0",
+      totalTimeMs: 0,
+    };
+
+    const startTime = Date.now();
+
+    // Validate all credentials before processing
+    for (let i = 0; i < credentials.length; i++) {
+      const cred = credentials[i];
+      
+      // Basic validation
+      if (!cred.studentId || !cred.name || !cred.degree) {
+        results.failed.push({
+          index: i,
+          studentId: cred.studentId,
+          error: "Missing required fields",
+        });
+        continue;
+      }
+
+      // Check if recipient exists
+      const recipient = await Student.findOne({ studentId: cred.studentId });
+      if (!recipient) {
+        results.failed.push({
+          index: i,
+          studentId: cred.studentId,
+          error: "Student not found",
+        });
+        continue;
+      }
+    }
+
+    // Process valid credentials in batches
+    const validCredentials = credentials.filter((_, index) => 
+      !results.failed.find(f => f.index === index)
+    );
+
+    // Process each credential
+    for (const credData of validCredentials) {
+      try {
+        const credentialId = `CRED-${crypto.randomBytes(4).toString("hex")}`;
+        const student = await Student.findOne({ studentId: credData.studentId });
+        const recipientUser = await User.findOne({ userId: student.userId });
+
+        // Create credential document for IPFS
+        const credentialDocument = {
+          credentialType: credData.degree,
+          credentialName: credData.name,
+          description: credData.description || "",
+          category: credData.category || "Degree",
+          issuer: {
+            name: institution.name,
+            country: institution.country,
+            userId: issuerId,
+          },
+          recipient: {
+            name: `${student.firstName} ${student.lastName}`,
+            studentId: student.studentId,
+            userId: student.userId,
+          },
+          issueDate: new Date(),
+          expiryDate: credData.expiryDate ? new Date(credData.expiryDate) : null,
+          metadata: credData.metadata || {},
+          issuedOn: new Date(),
+        };
+
+        // Generate hash
+        const credentialHash = crypto
+          .createHash("sha256")
+          .update(JSON.stringify(credentialDocument))
+          .digest("hex");
+
+        // Upload to IPFS
+        let ipfsHash = credData.ipfsHash;
+        if (!ipfsHash) {
+          ipfsHash = await uploadToIPFS(credentialDocument);
+        }
+
+        // Issue on blockchain with gas tracking
+        const gasStartTime = Date.now();
+        const blockchainResult = await issueCredential(
+          config.blockchain.institutionPrivateKey,
+          credentialId,
+          student.userId,
+          credentialHash,
+          ipfsHash,
+          credData.expiryDate ? Math.floor(new Date(credData.expiryDate).getTime() / 1000) : 0
+        );
+
+        if (!blockchainResult.success) {
+          results.failed.push({
+            index: credentials.indexOf(credData),
+            studentId: credData.studentId,
+            error: blockchainResult.error,
+          });
+          continue;
+        }
+
+        // Save to database
+        const credential = new Credential({
+          credentialId,
+          credentialType: credData.degree,
+          credentialName: credData.name,
+          description: credData.description || "",
+          category: credData.category || "Degree",
+          issuerId,
+          recipientId: student.userId,
+          recipientName: `${student.firstName} ${student.lastName}`,
+          recipientStudentId: student.studentId,
+          issueDate: new Date(),
+          expiryDate: credData.expiryDate ? new Date(credData.expiryDate) : undefined,
+          status: "active",
+          metadata: credData.metadata || {},
+          blockchainTxHash: blockchainResult.txHash,
+          ipfsHash,
+          verifications: 0,
+        });
+
+        await credential.save();
+
+        // Update student's credentials count
+        student.credentialsCount += 1;
+        await student.save();
+
+        results.successful.push({
+          credentialId,
+          studentId: credData.studentId,
+          txHash: blockchainResult.txHash,
+          ipfsHash,
+          gasUsed: blockchainResult.gasUsed || "0",
+          timeMs: Date.now() - gasStartTime,
+        });
+
+      } catch (error) {
+        results.failed.push({
+          index: credentials.indexOf(credData),
+          studentId: credData.studentId,
+          error: error.message,
+        });
+      }
+
+      // Add delay between transactions to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    results.totalTimeMs = Date.now() - startTime;
+
+    // Calculate total gas
+    results.totalGasUsed = results.successful
+      .reduce((sum, item) => sum + BigInt(item.gasUsed || 0), BigInt(0))
+      .toString();
+
+    return res.status(200).json({
+      success: true,
+      summary: {
+        total: credentials.length,
+        successful: results.successful.length,
+        failed: results.failed.length,
+        totalGasUsed: results.totalGasUsed,
+        totalTimeMs: results.totalTimeMs,
+        avgTimePerCredential: results.totalTimeMs / credentials.length,
+      },
+      results,
+    });
+
+  } catch (error) {
+    console.error("Batch credential issuance error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to issue batch credentials",
+      error: error.message,
+    });
+  }
+};
+
+
 // Revoke a credential
 export const revokeACredential = async (req: AuthRequest, res: Response) => {
   try {

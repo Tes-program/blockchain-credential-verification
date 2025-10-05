@@ -105,7 +105,8 @@ export const issueCredential = async (
     const receipt = await tx.wait();
     return {
       success: true,
-      txHash: receipt.transactionHash
+      txHash: receipt.transactionHash,
+      gasUsed: receipt.gasUsed.toString()
     };
   } catch (error) {
     console.error('Error issuing credential on blockchain:', error);
