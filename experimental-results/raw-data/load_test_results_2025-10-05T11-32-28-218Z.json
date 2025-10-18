@@ -1,0 +1,21 @@
+[
+  {
+    "concurrent_users": 10,
+    "total_requests": 204,
+    "successful_requests": 197,
+    "failed_requests": 7,
+    "response_time_p50_ms": 553.8431350000028,
+    "response_time_p95_ms": 1695.5083950000007,
+    "response_time_p99_ms": 10002.48545,
+    "throughput_req_per_sec": 3.2162427370278555,
+    "error_rate": 0.03431372549019608,
+    "timeout_count": 3,
+    "infura_rate_limit_hits": 0,
+    "test_duration_seconds": 63.42804840299999,
+    "requests_by_type": {
+      "verification": 140,
+      "issuance": 41,
+      "ipfs_retrieval": 23
+    }
+  }
+]

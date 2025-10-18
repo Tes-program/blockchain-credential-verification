@@ -1,0 +1,21 @@
+[
+  {
+    "concurrent_users": 10,
+    "total_requests": 0,
+    "successful_requests": 0,
+    "failed_requests": 0,
+    "response_time_p50_ms": 0,
+    "response_time_p95_ms": 0,
+    "response_time_p99_ms": 0,
+    "throughput_req_per_sec": 0,
+    "error_rate": null,
+    "timeout_count": 0,
+    "infura_rate_limit_hits": 0,
+    "test_duration_seconds": 0.0003698129999993398,
+    "requests_by_type": {
+      "verification": 0,
+      "issuance": 0,
+      "ipfs_retrieval": 0
+    }
+  }
+]

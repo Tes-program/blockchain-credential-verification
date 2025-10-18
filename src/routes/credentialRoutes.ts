@@ -20,6 +20,8 @@ router.get('/:id', getCredentialDetails as unknown as RequestHandler);
 // Institution-only routes
 router.post('/issue', requireRole(['institution']) as RequestHandler, issueNewCredential as unknown as RequestHandler);
 router.put('/:id/revoke', requireRole(['institution']) as RequestHandler, revokeACredential as unknown as RequestHandler);
+router.post('/batch', requireRole(['institution']) as RequestHandler, issueBatchCredentials as unknown as RequestHandler);  // Add this line
+
 
 // Student-only routes
 router.post('/:id/share', requireRole(['student']) as RequestHandler, shareCredential as unknown as RequestHandler);

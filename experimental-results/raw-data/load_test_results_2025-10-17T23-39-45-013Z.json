@@ -1,0 +1,40 @@
+[
+  {
+    "concurrent_users": 10,
+    "total_requests": 217,
+    "successful_requests": 213,
+    "failed_requests": 4,
+    "response_time_p50_ms": 486.77400399999897,
+    "response_time_p95_ms": 2268.082006000004,
+    "response_time_p99_ms": 9423.684489000001,
+    "throughput_req_per_sec": 3.4802115430991276,
+    "error_rate": 0.018433179723502304,
+    "timeout_count": 1,
+    "infura_rate_limit_hits": 0,
+    "test_duration_seconds": 62.352531538,
+    "requests_by_type": {
+      "verification": 149,
+      "issuance": 46,
+      "ipfs_retrieval": 22
+    }
+  },
+  {
+    "concurrent_users": 50,
+    "total_requests": 364,
+    "successful_requests": 159,
+    "failed_requests": 205,
+    "response_time_p50_ms": 10000.659217000008,
+    "response_time_p95_ms": 10002.209734999997,
+    "response_time_p99_ms": 10003.300468000001,
+    "throughput_req_per_sec": 5.039680564786287,
+    "error_rate": 0.5631868131868132,
+    "timeout_count": 202,
+    "infura_rate_limit_hits": 0,
+    "test_duration_seconds": 72.22679995700001,
+    "requests_by_type": {
+      "verification": 261,
+      "issuance": 67,
+      "ipfs_retrieval": 36
+    }
+  }
+]

@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import config from '../config';
 import CredentialRegistryABI from '../contracts/abi/CredentialRegistry.json';
 import InstitutionRegistryABI from '../contracts/abi/InstitutionRegistry.json';
+import { rateLimitedWeb3Call } from '../utils/rateLimiter';
 
 // Define interface for the contract functions we'll use
 interface CredentialRegistry extends ethers.Contract {
@@ -93,16 +94,24 @@ export const issueCredential = async (
   try {
     const wallet = getWallet(privateKey);
     const { credentialRegistry } = getContracts(wallet);
+
+        // Wrap transaction with rate limiter
+    const tx = await rateLimitedWeb3Call(
+      'eth_sendRawTransaction',
+      () => credentialRegistry.issueCredential(
+        credentialId,
+        recipientId,
+        credentialHash,
+        ipfsHash,
+        expiryDate || 0
+      )
+    ) as ethers.ContractTransaction;
+
+      const receipt = await rateLimitedWeb3Call(
+      'eth_getTransactionReceipt',
+      () => tx.wait()
+    ) as ethers.ContractReceipt;
     
-    const tx = await credentialRegistry.issueCredential(
-      credentialId,
-      recipientId,
-      credentialHash,
-      ipfsHash,
-      expiryDate || 0
-    );
-    
-    const receipt = await tx.wait();
     return {
       success: true,
       txHash: receipt.transactionHash,
@@ -117,7 +126,7 @@ export const issueCredential = async (
   }
 };
 
-// Revoke credential on the blockchain
+// Modify revokeCredential function
 export const revokeCredential = async (
   privateKey: string,
   credentialId: string
@@ -126,19 +135,23 @@ export const revokeCredential = async (
     const wallet = getWallet(privateKey);
     const { credentialRegistry } = getContracts(wallet);
     
-    const tx = await credentialRegistry.revokeCredential(credentialId);
-    const receipt = await tx.wait();
+    const tx = await rateLimitedWeb3Call(
+      'eth_sendRawTransaction',
+      () => credentialRegistry.revokeCredential(credentialId)
+    ) as ethers.ContractTransaction;
+    
+    const receipt = await rateLimitedWeb3Call(
+      'eth_getTransactionReceipt',
+      () => tx.wait()
+    ) as ethers.ContractReceipt;
     
     return {
       success: true,
       txHash: receipt.transactionHash
     };
   } catch (error) {
-    console.error('Error revoking credential on blockchain:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    console.error('Error revoking credential:', error);
+    return { success: false, error: error.message };
   }
 };
 
@@ -147,8 +160,13 @@ export const verifyCredential = async (credentialId: string) => {
   try {
     const { credentialRegistry } = getReadContracts();
     
-    const [isValid, issuer, recipientId, ipfsHash, issueDate, isRevoked] = 
-      await credentialRegistry.verifyCredential(credentialId);
+    // Wrap read call with rate limiter
+    const result = await rateLimitedWeb3Call(
+      'eth_call',
+      () => credentialRegistry.verifyCredential(credentialId)
+    ) as [boolean, string, string, string, ethers.BigNumber, boolean];
+    
+    const [isValid, issuer, recipientId, ipfsHash, issueDate, isRevoked] = result;
     
     return {
       success: true,
@@ -162,13 +180,11 @@ export const verifyCredential = async (credentialId: string) => {
       }
     };
   } catch (error) {
-    console.error('Error verifying credential on blockchain:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    console.error('Error verifying credential:', error);
+    return { success: false, error: error.message };
   }
 };
+
 
 // Register institution on the blockchain
 export const registerInstitution = async (

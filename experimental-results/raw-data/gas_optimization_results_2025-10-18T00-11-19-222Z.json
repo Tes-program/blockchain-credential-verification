@@ -1,0 +1,178 @@
+{
+  "results": [
+    {
+      "contract_version": "BASELINE",
+      "operation": "issueCredential_1",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 15724.000922000001,
+      "block_number": 0,
+      "batch_size": 1
+    },
+    {
+      "contract_version": "BASELINE",
+      "operation": "verifyCredential_1",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 349.0586739999999,
+      "block_number": 0,
+      "batch_size": 1
+    },
+    {
+      "contract_version": "BASELINE",
+      "operation": "revokeCredential_1",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 320.5620569999992,
+      "block_number": 0,
+      "batch_size": 1
+    },
+    {
+      "contract_version": "BATCH_OPTIMIZED",
+      "operation": "issueCredentialBatch_10",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 16239.820149,
+      "block_number": 0,
+      "batch_size": 10
+    },
+    {
+      "contract_version": "BATCH_OPTIMIZED",
+      "operation": "issueCredentialBatch_50",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 2563.9245289999963,
+      "block_number": 0,
+      "batch_size": 50
+    },
+    {
+      "contract_version": "BATCH_OPTIMIZED",
+      "operation": "issueCredentialBatch_100",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 1931.0451189999949,
+      "block_number": 0,
+      "batch_size": 100
+    },
+    {
+      "contract_version": "STORAGE_OPTIMIZED",
+      "operation": "issueCredentialMinimal_1",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 14131.816205999996,
+      "block_number": 0,
+      "batch_size": 1
+    }
+  ],
+  "comparison": {
+    "baseline": [
+      {
+        "contract_version": "BASELINE",
+        "operation": "issueCredential_1",
+        "gas_used": "0",
+        "transaction_hash": "0x0",
+        "sepolia_cost_eth": "0",
+        "estimated_mainnet_cost_usd": 0,
+        "execution_time_ms": 15724.000922000001,
+        "block_number": 0,
+        "batch_size": 1
+      },
+      {
+        "contract_version": "BASELINE",
+        "operation": "verifyCredential_1",
+        "gas_used": "0",
+        "transaction_hash": "0x0",
+        "sepolia_cost_eth": "0",
+        "estimated_mainnet_cost_usd": 0,
+        "execution_time_ms": 349.0586739999999,
+        "block_number": 0,
+        "batch_size": 1
+      },
+      {
+        "contract_version": "BASELINE",
+        "operation": "revokeCredential_1",
+        "gas_used": "0",
+        "transaction_hash": "0x0",
+        "sepolia_cost_eth": "0",
+        "estimated_mainnet_cost_usd": 0,
+        "execution_time_ms": 320.5620569999992,
+        "block_number": 0,
+        "batch_size": 1
+      }
+    ],
+    "batch_optimized": [
+      {
+        "contract_version": "BATCH_OPTIMIZED",
+        "operation": "issueCredentialBatch_10",
+        "gas_used": "0",
+        "transaction_hash": "0x0",
+        "sepolia_cost_eth": "0",
+        "estimated_mainnet_cost_usd": 0,
+        "execution_time_ms": 16239.820149,
+        "block_number": 0,
+        "batch_size": 10
+      },
+      {
+        "contract_version": "BATCH_OPTIMIZED",
+        "operation": "issueCredentialBatch_50",
+        "gas_used": "0",
+        "transaction_hash": "0x0",
+        "sepolia_cost_eth": "0",
+        "estimated_mainnet_cost_usd": 0,
+        "execution_time_ms": 2563.9245289999963,
+        "block_number": 0,
+        "batch_size": 50
+      },
+      {
+        "contract_version": "BATCH_OPTIMIZED",
+        "operation": "issueCredentialBatch_100",
+        "gas_used": "0",
+        "transaction_hash": "0x0",
+        "sepolia_cost_eth": "0",
+        "estimated_mainnet_cost_usd": 0,
+        "execution_time_ms": 1931.0451189999949,
+        "block_number": 0,
+        "batch_size": 100
+      }
+    ],
+    "storage_optimized": [
+      {
+        "contract_version": "STORAGE_OPTIMIZED",
+        "operation": "issueCredentialMinimal_1",
+        "gas_used": "0",
+        "transaction_hash": "0x0",
+        "sepolia_cost_eth": "0",
+        "estimated_mainnet_cost_usd": 0,
+        "execution_time_ms": 14131.816205999996,
+        "block_number": 0,
+        "batch_size": 1
+      }
+    ],
+    "summary": {
+      "batch_improvement_percentage": null,
+      "storage_improvement_percentage": null,
+      "break_even_batch_size": 0,
+      "cost_per_credential": {
+        "baseline": 0,
+        "batch_optimized": 0,
+        "storage_optimized": 0
+      }
+    }
+  },
+  "timestamp": "2025-10-18T00:11:19.223Z",
+  "network": "sepolia"
+}

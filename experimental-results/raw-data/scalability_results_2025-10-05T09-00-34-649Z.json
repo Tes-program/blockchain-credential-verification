@@ -1,0 +1,37 @@
+[
+  {
+    "volume": 10,
+    "total_duration_seconds": 0.7942353870000006,
+    "avg_time_per_credential_ms": 79.42568179999998,
+    "total_gas_used": "0",
+    "avg_gas_per_credential": "0",
+    "ipfs_upload_times_ms": [
+      0.17530299999998533,
+      0.005009000000427477,
+      0.0029160000012780074,
+      0.002764999999271822,
+      0.0023540000001958106,
+      0.002414999999018619,
+      0.0025749999986146577,
+      0.002735000000029686,
+      0.003576999999495456,
+      0.0038780000013503013
+    ],
+    "blockchain_confirmation_times_ms": [],
+    "success_rate": 0,
+    "failed_credentials": [
+      "STUZMUMFP9G",
+      "STUHCUN42ZV",
+      "STUPUGK3Y9O",
+      "STUTFRPPGO6",
+      "STURH3LQ9C8",
+      "STUKA37VGX1",
+      "STUYRV7LI6Q",
+      "STUSGUYTPID",
+      "STUNIRZ2ZN2",
+      "STUGTFLIN8O"
+    ],
+    "sepolia_eth_consumed": "0.0",
+    "estimated_mainnet_cost_usd": 0
+  }
+]
