@@ -1,12 +1,12 @@
-// src/tests/gas-optimization-test.ts
+// src/tests/gas-optimization-test.ts - IMPROVED WITH DIAGNOSTICS
 import { ethers } from 'ethers';
 import fs from 'fs';
 import path from 'path';
 import { performance } from 'perf_hooks';
-import axios from 'axios';
 import config from '../config';
 import { DatabaseManager } from '../config/database';
-
+import CredentialRegistryABI from '../contracts/abi/CredentialRegistry.json';
+import InstitutionRegistryABI from '../contracts/abi/InstitutionRegistry.json';
 
 interface GasMetrics {
   contract_version: string;
@@ -18,31 +18,18 @@ interface GasMetrics {
   execution_time_ms: number;
   block_number: number;
   batch_size?: number;
-}
-
-interface OptimizationComparison {
-  baseline: GasMetrics[];
-  batch_optimized: GasMetrics[];
-  storage_optimized: GasMetrics[];
-  summary: {
-    batch_improvement_percentage: number;
-    storage_improvement_percentage: number;
-    break_even_batch_size: number;
-    cost_per_credential: {
-      baseline: number;
-      batch_optimized: number;
-      storage_optimized: number;
-    };
-  };
+  status?: 'success' | 'failed';
+  error?: string;
 }
 
 class GasOptimizationTest {
   private provider: ethers.providers.Provider;
   private wallet: ethers.Wallet;
+  private credentialRegistry: ethers.Contract;
+  private institutionRegistry: ethers.Contract;
   private results: GasMetrics[] = [];
-  private comparison: OptimizationComparison;
   private dbManager: DatabaseManager;
-
+  private testRunId: string;
 
   constructor() {
     this.provider = new ethers.providers.InfuraProvider(
@@ -54,374 +41,406 @@ class GasOptimizationTest {
       this.provider
     );
 
+    this.credentialRegistry = new ethers.Contract(
+      config.blockchain.contractAddresses.credentialRegistry,
+      CredentialRegistryABI.abi,
+      this.wallet
+    );
+
+    this.institutionRegistry = new ethers.Contract(
+      config.blockchain.contractAddresses.institutionRegistry,
+      InstitutionRegistryABI.abi,
+      this.wallet
+    );
+
     this.dbManager = new DatabaseManager();
+    this.testRunId = Date.now().toString();
+  }
+
+  /**
+   * Comprehensive registration check with detailed diagnostics
+   */
+  private async verifyInstitutionStatus(): Promise<void> {
+    console.log('🔍 DETAILED INSTITUTION VERIFICATION');
+    console.log('=====================================');
+    console.log(`Wallet Address: ${this.wallet.address}\n`);
     
-    this.comparison = {
-      baseline: [],
-      batch_optimized: [],
-      storage_optimized: [],
-      summary: {
-        batch_improvement_percentage: 0,
-        storage_improvement_percentage: 0,
-        break_even_batch_size: 0,
-        cost_per_credential: {
-          baseline: 0,
-          batch_optimized: 0,
-          storage_optimized: 0,
-        },
-      },
+    try {
+      // Check 1: Is registered?
+      const isRegistered = await this.institutionRegistry.isRegistered(this.wallet.address);
+      console.log(`✓ isRegistered(): ${isRegistered}`);
+      
+      if (!isRegistered) {
+        throw new Error('Institution not registered or not active');
+      }
+
+      // Check 2: Get full details
+      try {
+        const details = await this.institutionRegistry.getInstitutionDetails(this.wallet.address);
+        console.log(`✓ Institution ID: ${details.institutionId}`);
+        console.log(`✓ Name: ${details.name}`);
+        console.log(`✓ Type: ${details.institutionType}`);
+        console.log(`✓ Country: ${details.country}`);
+        console.log(`✓ Is Active: ${details.isActive}`);
+        console.log(`✓ Registration Date: ${new Date(details.registrationDate.toNumber() * 1000).toISOString()}`);
+        
+        if (!details.isActive) {
+          throw new Error('Institution is registered but not active');
+        }
+      } catch (error) {
+        console.error('✗ Could not fetch institution details:', error.message);
+        throw error;
+      }
+
+      // Check 3: Test with credential registry
+      const registryInstitution = await this.credentialRegistry.institutionRegistry();
+      console.log(`✓ Credential Registry points to: ${registryInstitution}`);
+      console.log(`✓ Expected: ${config.blockchain.contractAddresses.institutionRegistry}`);
+      
+      if (registryInstitution.toLowerCase() !== config.blockchain.contractAddresses.institutionRegistry.toLowerCase()) {
+        throw new Error('Credential Registry is pointing to wrong Institution Registry!');
+      }
+
+      console.log('\n✅ All verification checks passed!\n');
+      
+    } catch (error) {
+      console.error('\n❌ Institution verification failed:', error.message);
+      console.error('\n💡 To fix this, run:');
+      console.error('   npx hardhat run src/scripts/registerInstitution.js --network sepolia\n');
+      throw error;
+    }
+  }
+
+  /**
+   * Generate truly unique credential data
+   */
+  private generateUniqueCredentialData(index: number) {
+    // Use test run ID + timestamp + index for uniqueness
+    const uniqueId = `GAS_${this.testRunId}_${Date.now()}_${Math.random().toString(36).substring(7)}_${index}`;
+    const recipientId = `RCP_${this.testRunId}_${index}`;
+    
+    const credentialData = {
+      credentialId: uniqueId,
+      recipientId: recipientId,
+      degree: 'Bachelor of Science',
+      major: 'Computer Science',
+      issueDate: new Date().toISOString(),
+    };
+    
+    const credentialHash = ethers.utils.keccak256(
+      ethers.utils.toUtf8Bytes(JSON.stringify(credentialData))
+    );
+    
+    // Generate a valid IPFS-like hash (CIDv0 format)
+    const randomBytes = ethers.utils.randomBytes(32);
+    const ipfsHash = `Qm${ethers.utils.base58.encode(randomBytes).substring(0, 44)}`;
+    
+    return {
+      credentialId: uniqueId,
+      recipientId: recipientId,
+      credentialHash: credentialHash,
+      ipfsHash: ipfsHash,
+      expiryDate: 0
     };
   }
 
-private async connectDatabase() {
-    await this.dbManager.connectDatabase();
-  }
-
-  private async disconnectDatabase() {
-    await this.dbManager.disconnectDatabase();
+  /**
+   * Test if a credential ID already exists (to avoid duplicates)
+   */
+  private async credentialExists(credentialId: string): Promise<boolean> {
+    try {
+      const hash = await this.credentialRegistry.getCredentialHash(credentialId);
+      return hash && hash.length > 0;
+    } catch (error) {
+      return false;
+    }
   }
 
   async runTests(): Promise<void> {
-    console.log('🚀 Starting Gas Optimization Tests');
-    console.log('==================================');
+    console.log('🚀 GAS OPTIMIZATION TESTS - DIAGNOSTIC MODE');
+    console.log('============================================');
+    console.log(`Test Run ID: ${this.testRunId}\n`);
 
-    await this.connectDatabase();
+    await this.dbManager.connectDatabase();
 
     try {
       // Check balance
       const balance = await this.wallet.getBalance();
-      console.log(`💰 Initial balance: ${ethers.utils.formatEther(balance)} ETH`);
+      console.log(`💰 Balance: ${ethers.utils.formatEther(balance)} ETH`);
+      console.log(`   (Need ~0.05 ETH for tests)\n`);
 
-      if (balance.lt(ethers.utils.parseEther('0.1'))) {
-        throw new Error('Insufficient balance. Need at least 0.1 ETH for gas optimization tests');
+      if (balance.lt(ethers.utils.parseEther('0.01'))) {
+        throw new Error('Insufficient balance. Need at least 0.01 ETH');
       }
 
-      // Deploy contract variants
-      console.log('\n📝 Deploying contract variants...');
-      const contracts = await this.deployContractVariants();
+      // Comprehensive institution verification
+      await this.verifyInstitutionStatus();
 
-      // Test each variant
-      console.log('\n🧪 Testing BASELINE implementation...');
-      await this.testBaseline(contracts.baseline);
-
-      console.log('\n🧪 Testing BATCH_OPTIMIZED implementation...');
-      await this.testBatchOptimized(contracts.batchOptimized);
-
-      console.log('\n🧪 Testing STORAGE_OPTIMIZED implementation...');
-      await this.testStorageOptimized(contracts.storageOptimized);
-
-      // Calculate comparisons
-      await this.calculateComparisons();
+      // Test single operation first
+      console.log('📝 STEP 1: Testing Single Credential Issuance');
+      console.log('==============================================\n');
+      
+      const singleResult = await this.testSingleCredential();
+      
+      if (singleResult.status === 'success') {
+        console.log('\n✅ Single credential test PASSED!');
+        console.log(`   Gas Used: ${singleResult.gas_used}`);
+        console.log(`   Tx: https://sepolia.etherscan.io/tx/${singleResult.transaction_hash}\n`);
+        
+        // Only proceed to batch tests if single test succeeded
+        console.log('📝 STEP 2: Testing Batch Operations');
+        console.log('=====================================\n');
+        await this.testBatchOperations();
+      } else {
+        console.error('\n❌ Single credential test FAILED!');
+        console.error(`   Error: ${singleResult.error}\n`);
+        console.error('   Stopping tests - please fix the issue above first.\n');
+      }
 
       // Generate report
-      await this.generateReport();
-
-      // Save results
+      await this.generateDetailedReport();
       await this.saveResults();
 
+    } catch (error) {
+      console.error('\n❌ FATAL ERROR:', error.message);
+      throw error;
     } finally {
-      await this.disconnectDatabase();
+      await this.dbManager.disconnectDatabase();
     }
   }
 
-  private async deployContractVariants(): Promise<any> {
-    // For this test, we'll use different approaches with the same contract
-    // In a real scenario, you would deploy different contract versions
-    
-    return {
-      baseline: config.blockchain.contractAddresses.credentialRegistry,
-      batchOptimized: config.blockchain.contractAddresses.credentialRegistry, // Same for now
-      storageOptimized: config.blockchain.contractAddresses.credentialRegistry, // Same for now
-    };
-  }
-
-  private async testBaseline(contractAddress: string): Promise<void> {
-    const operations = [
-      { name: 'issueCredential', batchSizes: [1] },
-      { name: 'verifyCredential', batchSizes: [1] },
-      { name: 'revokeCredential', batchSizes: [1] },
-    ];
-
-    for (const op of operations) {
-      for (const batchSize of op.batchSizes) {
-        console.log(`   Testing ${op.name} (batch size: ${batchSize})...`);
-        
-        const metric = await this.measureGasUsage(
-          contractAddress,
-          op.name,
-          batchSize,
-          'BASELINE'
-        );
-        
-        this.comparison.baseline.push(metric);
-        this.results.push(metric);
-        
-        // Delay between operations
-        await this.delay(2000);
-      }
-    }
-  }
-
-  private async testBatchOptimized(contractAddress: string): Promise<void> {
-    const operations = [
-      { name: 'issueCredentialBatch', batchSizes: [10, 50, 100] },
-    ];
-
-    for (const op of operations) {
-      for (const batchSize of op.batchSizes) {
-        console.log(`   Testing ${op.name} (batch size: ${batchSize})...`);
-        
-        const metric = await this.measureGasUsage(
-          contractAddress,
-          op.name,
-          batchSize,
-          'BATCH_OPTIMIZED'
-        );
-        
-        this.comparison.batch_optimized.push(metric);
-        this.results.push(metric);
-        
-        // Delay between operations
-        await this.delay(2000);
-      }
-    }
-  }
-
-  private async testStorageOptimized(contractAddress: string): Promise<void> {
-    // Test with minimal on-chain storage
-    const operations = [
-      { name: 'issueCredentialMinimal', batchSizes: [1] },
-    ];
-
-    for (const op of operations) {
-      for (const batchSize of op.batchSizes) {
-        console.log(`   Testing ${op.name} (batch size: ${batchSize})...`);
-        
-        const metric = await this.measureGasUsage(
-          contractAddress,
-          op.name,
-          batchSize,
-          'STORAGE_OPTIMIZED'
-        );
-        
-        this.comparison.storage_optimized.push(metric);
-        this.results.push(metric);
-        
-        // Delay between operations
-        await this.delay(2000);
-      }
-    }
-  }
-
-  private async measureGasUsage(
-    contractAddress: string,
-    operation: string,
-    batchSize: number,
-    version: string
-  ): Promise<GasMetrics> {
+  /**
+   * Test single credential with extensive error checking
+   */
+  private async testSingleCredential(): Promise<GasMetrics> {
     const startTime = performance.now();
     
     try {
-      // Simulate different operations
-      let tx: ethers.ContractTransaction;
-      let receipt: ethers.ContractReceipt;
-
-      // For testing, we'll use actual transactions with small batches
-      // In production, you'd call the actual contract methods
+      const data = this.generateUniqueCredentialData(0);
       
-      if (operation.includes('issue')) {
-        // Create test transaction
-        tx = await this.wallet.sendTransaction({
-          to: contractAddress,
-          data: '0x' + this.generateTestCalldata(operation, batchSize),
-          gasLimit: 500000 * batchSize, // Adjust based on operation
-        });
-        
-        receipt = await tx.wait();
-      } else {
-        // For verify/revoke, use view functions (no gas)
-        // Estimate gas instead
-        const estimatedGas = await this.wallet.estimateGas({
-          to: contractAddress,
-          data: '0x' + this.generateTestCalldata(operation, batchSize),
-        });
-        
-        // Create mock receipt
-        receipt = {
-          gasUsed: estimatedGas,
-          blockNumber: await this.provider.getBlockNumber(),
-          transactionHash: '0x' + Math.random().toString(16).substring(2),
-        } as any;
+      console.log('Generated test data:');
+      console.log(`  Credential ID: ${data.credentialId}`);
+      console.log(`  Recipient ID: ${data.recipientId}`);
+      console.log(`  Hash: ${data.credentialHash.substring(0, 20)}...`);
+      console.log(`  IPFS: ${data.ipfsHash}\n`);
+
+      // Check if credential already exists
+      const exists = await this.credentialExists(data.credentialId);
+      if (exists) {
+        throw new Error(`Credential ${data.credentialId} already exists!`);
       }
 
-      const gasUsed = receipt.gasUsed.toString();
-      const gasPrice = await this.provider.getGasPrice();
+      console.log('Sending transaction...');
+      
+      // Estimate gas first
+      let estimatedGas;
+      try {
+        estimatedGas = await this.credentialRegistry.estimateGas.issueCredential(
+          data.credentialId,
+          data.recipientId,
+          data.credentialHash,
+          data.ipfsHash,
+          data.expiryDate
+        );
+        console.log(`  Estimated gas: ${estimatedGas.toString()}`);
+      } catch (error) {
+        console.error('  ❌ Gas estimation failed:', error.message);
+        throw new Error(`Cannot estimate gas: ${error.reason || error.message}`);
+      }
+
+      // Send transaction with estimated gas + buffer
+      const tx = await this.credentialRegistry.issueCredential(
+        data.credentialId,
+        data.recipientId,
+        data.credentialHash,
+        data.ipfsHash,
+        data.expiryDate,
+        {
+          gasLimit: estimatedGas.mul(120).div(100) // 20% buffer
+        }
+      );
+
+      console.log(`  Tx hash: ${tx.hash}`);
+      console.log('  Waiting for confirmation...');
+      
+      const receipt = await tx.wait();
+      
+      if (receipt.status === 0) {
+        throw new Error('Transaction reverted');
+      }
+
+      console.log('  ✅ Transaction confirmed!');
+      console.log(`  Block: ${receipt.blockNumber}`);
+      console.log(`  Gas used: ${receipt.gasUsed.toString()}`);
+
+      const gasPrice = receipt.effectiveGasPrice;
       const costInWei = receipt.gasUsed.mul(gasPrice);
       const costInEth = ethers.utils.formatEther(costInWei);
 
-      // Estimate mainnet cost
-      const mainnetCostUsd = await this.estimateMainnetCost(receipt.gasUsed);
-
-      return {
-        contract_version: version,
-        operation: `${operation}_${batchSize}`,
-        gas_used: gasUsed,
+      const metric: GasMetrics = {
+        contract_version: 'BASELINE',
+        operation: 'issueCredential_1',
+        gas_used: receipt.gasUsed.toString(),
         transaction_hash: receipt.transactionHash,
         sepolia_cost_eth: costInEth,
-        estimated_mainnet_cost_usd: mainnetCostUsd,
+        estimated_mainnet_cost_usd: await this.estimateMainnetCost(receipt.gasUsed),
         execution_time_ms: performance.now() - startTime,
         block_number: receipt.blockNumber,
-        batch_size: batchSize,
+        batch_size: 1,
+        status: 'success'
       };
+
+      this.results.push(metric);
+      return metric;
+
     } catch (error) {
-      console.error(`Error measuring gas for ${operation}:`, error);
+      console.error('  ❌ Error:', error.message);
       
-      // Return mock data for failed operations
-      return {
-        contract_version: version,
-        operation: `${operation}_${batchSize}`,
+      const metric: GasMetrics = {
+        contract_version: 'BASELINE',
+        operation: 'issueCredential_1',
         gas_used: '0',
         transaction_hash: '0x0',
         sepolia_cost_eth: '0',
         estimated_mainnet_cost_usd: 0,
         execution_time_ms: performance.now() - startTime,
         block_number: 0,
-        batch_size: batchSize,
+        batch_size: 1,
+        status: 'failed',
+        error: error.message
       };
+
+      this.results.push(metric);
+      return metric;
     }
   }
 
-  private generateTestCalldata(operation: string, batchSize: number): string {
-    // Generate appropriate calldata for different operations
-    // This is simplified - in reality, you'd encode actual function calls
+  /**
+   * Test batch operations (multiple sequential calls)
+   */
+  private async testBatchOperations(): Promise<void> {
+    const batchSizes = [3, 5]; // Small batches for cost efficiency
     
-    const functionSelectors: Record<string, string> = {
-      issueCredential: '22e4c747',
-      issueCredentialBatch: 'abcdef01', // Mock selector
-      issueCredentialMinimal: 'abcdef02', // Mock selector
-      verifyCredential: 'bb3670ab',
-      revokeCredential: '5e9a2d28',
-    };
+    for (const size of batchSizes) {
+      console.log(`Testing batch of ${size} credentials...\n`);
+      
+      const startTime = performance.now();
+      let totalGas = ethers.BigNumber.from(0);
+      let successCount = 0;
+      const txHashes: string[] = [];
+      
+      for (let i = 0; i < size; i++) {
+        try {
+          const data = this.generateUniqueCredentialData(i);
+          
+          const tx = await this.credentialRegistry.issueCredential(
+            data.credentialId,
+            data.recipientId,
+            data.credentialHash,
+            data.ipfsHash,
+            data.expiryDate,
+            { gasLimit: 300000 }
+          );
 
-    const selector = functionSelectors[operation] || '00000000';
-    
-    // Add mock parameters based on batch size
-    let calldata = selector;
-    for (let i = 0; i < batchSize; i++) {
-      // Add mock credential data (simplified)
-      calldata += '0000000000000000000000000000000000000000000000000000000000000020';
+          console.log(`  [${i + 1}/${size}] Tx: ${tx.hash}`);
+          
+          const receipt = await tx.wait();
+          
+          if (receipt.status === 1) {
+            totalGas = totalGas.add(receipt.gasUsed);
+            txHashes.push(receipt.transactionHash);
+            successCount++;
+            console.log(`  [${i + 1}/${size}] ✅ Gas: ${receipt.gasUsed.toString()}`);
+          } else {
+            console.log(`  [${i + 1}/${size}] ❌ Reverted`);
+          }
+          
+          // Delay between transactions
+          await this.delay(2000);
+          
+        } catch (error) {
+          console.error(`  [${i + 1}/${size}] ❌ Error: ${error.message}`);
+        }
+      }
+      
+      const totalTime = performance.now() - startTime;
+      const avgGas = successCount > 0 ? totalGas.div(successCount) : ethers.BigNumber.from(0);
+      
+      console.log(`\nBatch Summary:`);
+      console.log(`  Success: ${successCount}/${size}`);
+      console.log(`  Total Gas: ${totalGas.toString()}`);
+      console.log(`  Avg Gas/Credential: ${avgGas.toString()}\n`);
+      
+      const metric: GasMetrics = {
+        contract_version: 'BATCH_OPTIMIZED',
+        operation: `issueCredentialBatch_${size}`,
+        gas_used: totalGas.toString(),
+        transaction_hash: txHashes[0] || '0x0',
+        sepolia_cost_eth: ethers.utils.formatEther(
+          totalGas.mul(await this.provider.getGasPrice())
+        ),
+        estimated_mainnet_cost_usd: await this.estimateMainnetCost(totalGas),
+        execution_time_ms: totalTime,
+        block_number: await this.provider.getBlockNumber(),
+        batch_size: size,
+        status: successCount === size ? 'success' : 'failed',
+        error: successCount < size ? `Only ${successCount}/${size} succeeded` : undefined
+      };
+      
+      this.results.push(metric);
+      
+      await this.delay(5000); // Cool down between batches
     }
-    
-    return calldata;
   }
 
   private async estimateMainnetCost(gasUsed: ethers.BigNumber): Promise<number> {
     try {
-      // Fetch current gas prices
-      const response = await axios.get(
-        `https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=${process.env.ETHERSCAN_API_KEY || 'YourEtherscanAPIKey'}`
-      );
-      
-      const gasPriceGwei = response.data.result?.SafeGasPrice || 30;
-      
-      // Fetch ETH price
-      const priceResponse = await axios.get(
-        'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd'
-      );
-      const ethPrice = priceResponse.data.ethereum?.usd || 3000;
-      
-      // Calculate cost
+      const gasPriceGwei = 30;
+      const ethPrice = 2000;
       const costInEth = gasUsed.mul(gasPriceGwei).div(ethers.utils.parseUnits('1', 'gwei'));
       const costInUsd = parseFloat(ethers.utils.formatEther(costInEth)) * ethPrice;
-      
       return costInUsd;
-    } catch (error) {
-      console.error('Error fetching gas prices:', error);
+    } catch {
       return 0;
     }
   }
 
-  private async calculateComparisons(): Promise<void> {
-    // Calculate average gas per operation for baseline
-    const baselineAvg = this.comparison.baseline.reduce(
-      (sum, m) => sum + parseInt(m.gas_used), 0
-    ) / this.comparison.baseline.length;
-
-    // Calculate average for batch operations
-    const batchResults = this.comparison.batch_optimized;
-    if (batchResults.length > 0) {
-      const batchAvgPerCredential = batchResults.map(m => 
-        parseInt(m.gas_used) / (m.batch_size || 1)
-      );
-      const batchAvg = batchAvgPerCredential.reduce((sum, v) => sum + v, 0) / batchAvgPerCredential.length;
-      
-      this.comparison.summary.batch_improvement_percentage = 
-        ((baselineAvg - batchAvg) / baselineAvg) * 100;
-      
-      // Find break-even batch size
-      for (const metric of batchResults) {
-        const perCredentialGas = parseInt(metric.gas_used) / (metric.batch_size || 1);
-        if (perCredentialGas < baselineAvg * 0.9) { // 10% improvement threshold
-          this.comparison.summary.break_even_batch_size = metric.batch_size || 1;
-          break;
+  private async generateDetailedReport(): Promise<void> {
+    console.log('\n' + '='.repeat(70));
+    console.log('📊 GAS OPTIMIZATION TEST RESULTS');
+    console.log('='.repeat(70) + '\n');
+    
+    const successful = this.results.filter(r => r.status === 'success');
+    const failed = this.results.filter(r => r.status === 'failed');
+    
+    console.log(`Summary: ${successful.length} successful, ${failed.length} failed\n`);
+    
+    if (successful.length > 0) {
+      console.log('✅ SUCCESSFUL OPERATIONS:');
+      console.log('-'.repeat(70));
+      for (const r of successful) {
+        const perCredGas = parseInt(r.gas_used) / (r.batch_size || 1);
+        console.log(`\n${r.operation}:`);
+        console.log(`  Total Gas: ${r.gas_used}`);
+        console.log(`  Per Credential: ${perCredGas.toFixed(0)} gas`);
+        console.log(`  Cost: $${r.estimated_mainnet_cost_usd.toFixed(4)} (mainnet estimate)`);
+        console.log(`  Tx: https://sepolia.etherscan.io/tx/${r.transaction_hash}`);
+      }
+    }
+    
+    if (failed.length > 0) {
+      console.log('\n\n❌ FAILED OPERATIONS:');
+      console.log('-'.repeat(70));
+      for (const r of failed) {
+        console.log(`\n${r.operation}:`);
+        console.log(`  Error: ${r.error || 'Unknown error'}`);
+        if (r.transaction_hash !== '0x0') {
+          console.log(`  Tx: https://sepolia.etherscan.io/tx/${r.transaction_hash}`);
         }
       }
     }
-
-    // Calculate storage optimization improvement
-    const storageResults = this.comparison.storage_optimized;
-    if (storageResults.length > 0) {
-      const storageAvg = storageResults.reduce(
-        (sum, m) => sum + parseInt(m.gas_used), 0
-      ) / storageResults.length;
-      
-      this.comparison.summary.storage_improvement_percentage = 
-        ((baselineAvg - storageAvg) / baselineAvg) * 100;
-    }
-
-    // Calculate cost per credential
-    this.comparison.summary.cost_per_credential = {
-      baseline: this.comparison.baseline[0]?.estimated_mainnet_cost_usd || 0,
-      batch_optimized: batchResults[0]?.estimated_mainnet_cost_usd || 0,
-      storage_optimized: storageResults[0]?.estimated_mainnet_cost_usd || 0,
-    };
-  }
-
-  private async generateReport(): Promise<void> {
-    console.log('\n============================================================');
-    console.log('📊 GAS OPTIMIZATION REPORT');
-    console.log('============================================================');
     
-    console.log('\n🔍 BASELINE IMPLEMENTATION');
-    console.log('────────────────────────────────');
-    for (const metric of this.comparison.baseline) {
-      console.log(`   ${metric.operation}: ${metric.gas_used} gas ($${metric.estimated_mainnet_cost_usd.toFixed(4)})`);
-    }
-
-    console.log('\n⚡ BATCH OPTIMIZED IMPLEMENTATION');
-    console.log('────────────────────────────────');
-    for (const metric of this.comparison.batch_optimized) {
-      const perCredential = parseInt(metric.gas_used) / (metric.batch_size || 1);
-      console.log(`   ${metric.operation}: ${metric.gas_used} gas total, ${perCredential.toFixed(0)} per credential`);
-    }
-
-    console.log('\n💾 STORAGE OPTIMIZED IMPLEMENTATION');
-    console.log('────────────────────────────────');
-    for (const metric of this.comparison.storage_optimized) {
-      console.log(`   ${metric.operation}: ${metric.gas_used} gas ($${metric.estimated_mainnet_cost_usd.toFixed(4)})`);
-    }
-
-    console.log('\n📈 OPTIMIZATION SUMMARY');
-    console.log('────────────────────────────────');
-    console.log(`   Batch Improvement: ${this.comparison.summary.batch_improvement_percentage.toFixed(2)}%`);
-    console.log(`   Storage Improvement: ${this.comparison.summary.storage_improvement_percentage.toFixed(2)}%`);
-    console.log(`   Break-even Batch Size: ${this.comparison.summary.break_even_batch_size}`);
-    console.log(`   Cost per Credential:`);
-    console.log(`      Baseline: $${this.comparison.summary.cost_per_credential.baseline.toFixed(4)}`);
-    console.log(`      Batch Optimized: $${this.comparison.summary.cost_per_credential.batch_optimized.toFixed(4)}`);
-    console.log(`      Storage Optimized: $${this.comparison.summary.cost_per_credential.storage_optimized.toFixed(4)}`);
-    
-    console.log('\n============================================================');
+    console.log('\n' + '='.repeat(70) + '\n');
   }
 
   private async saveResults(): Promise<void> {
@@ -434,15 +453,20 @@ private async connectDatabase() {
       fs.mkdirSync(dir, { recursive: true });
     }
     
-    const output = {
+    fs.writeFileSync(filepath, JSON.stringify({
+      testRunId: this.testRunId,
       results: this.results,
-      comparison: this.comparison,
       timestamp: new Date().toISOString(),
       network: 'sepolia',
-    };
+      wallet: this.wallet.address,
+      summary: {
+        total: this.results.length,
+        successful: this.results.filter(r => r.status === 'success').length,
+        failed: this.results.filter(r => r.status === 'failed').length
+      }
+    }, null, 2));
     
-    fs.writeFileSync(filepath, JSON.stringify(output, null, 2));
-    console.log(`\n✅ Results saved to ${filename}`);
+    console.log(`💾 Results saved to: ${filename}\n`);
   }
 
   private delay(ms: number): Promise<void> {
@@ -452,16 +476,15 @@ private async connectDatabase() {
 
 export default GasOptimizationTest;
 
-// Run if executed directly
 if (require.main === module) {
   const test = new GasOptimizationTest();
   test.runTests()
     .then(() => {
-      console.log('\n✅ Gas optimization tests completed successfully');
+      console.log('✅ Tests completed');
       process.exit(0);
     })
     .catch((error) => {
-      console.error('\n❌ Gas optimization tests failed:', error);
+      console.error('❌ Tests failed:', error);
       process.exit(1);
     });
 }

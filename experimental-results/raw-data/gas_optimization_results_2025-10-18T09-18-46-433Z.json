@@ -1,0 +1,41 @@
+{
+  "results": [
+    {
+      "contract_version": "BASELINE",
+      "operation": "issueCredential_1",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 15179.008933,
+      "block_number": 0,
+      "batch_size": 1
+    },
+    {
+      "contract_version": "BATCH_OPTIMIZED",
+      "operation": "issueCredentialBatch_5",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0.0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 69508.148455,
+      "block_number": 9437260,
+      "batch_size": 5
+    },
+    {
+      "contract_version": "BATCH_OPTIMIZED",
+      "operation": "issueCredentialBatch_10",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0.0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 128169.555575,
+      "block_number": 9437271,
+      "batch_size": 10
+    }
+  ],
+  "timestamp": "2025-10-18T09:18:46.434Z",
+  "network": "sepolia",
+  "wallet": "0xd5D13D5ba57b1bd881db1C3146CF8b5e8e2d3baE",
+  "isRegistered": true
+}

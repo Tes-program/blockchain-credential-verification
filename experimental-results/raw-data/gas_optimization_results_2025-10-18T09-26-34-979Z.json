@@ -1,0 +1,51 @@
+{
+  "testRunId": "1760779472500",
+  "results": [
+    {
+      "contract_version": "BASELINE",
+      "operation": "issueCredential_1",
+      "gas_used": "345441",
+      "transaction_hash": "0x73f5141d91f1c177e4def80cd1ff7c1c7bfcc04d86284d7eb10ca994361a90c0",
+      "sepolia_cost_eth": "0.00051816150345441",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 15421.949524999998,
+      "block_number": 9437302,
+      "batch_size": 1,
+      "status": "success"
+    },
+    {
+      "contract_version": "BATCH_OPTIMIZED",
+      "operation": "issueCredentialBatch_3",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0.0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 31940.614312,
+      "block_number": 9437305,
+      "batch_size": 3,
+      "status": "failed",
+      "error": "Only 0/3 succeeded"
+    },
+    {
+      "contract_version": "BATCH_OPTIMIZED",
+      "operation": "issueCredentialBatch_5",
+      "gas_used": "0",
+      "transaction_hash": "0x0",
+      "sepolia_cost_eth": "0.0",
+      "estimated_mainnet_cost_usd": 0,
+      "execution_time_ms": 58755.689731,
+      "block_number": 9437310,
+      "batch_size": 5,
+      "status": "failed",
+      "error": "Only 0/5 succeeded"
+    }
+  ],
+  "timestamp": "2025-10-18T09:26:34.979Z",
+  "network": "sepolia",
+  "wallet": "0xd5D13D5ba57b1bd881db1C3146CF8b5e8e2d3baE",
+  "summary": {
+    "total": 3,
+    "successful": 1,
+    "failed": 2
+  }
+}
